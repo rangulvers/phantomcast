@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { api, Surface, Motion, SourceFile, Status } from './api';
+import './styles.css';
 
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -54,57 +55,63 @@ export function App() {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Scale factors from projector resolution to preview size
     const scaleX = canvas.width / (status?.resolution[0] ?? 1920);
     const scaleY = canvas.height / (status?.resolution[1] ?? 1080);
-
     const pts = surface.dst_points.map(([x, y]) => [x * scaleX, y * scaleY]);
 
-    // Draw quad outline
+    // Quad fill (subtle)
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(pts[i][0], pts[i][1]);
-    }
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
-    ctx.strokeStyle = '#00ff88';
+    ctx.fillStyle = 'rgba(0, 230, 118, 0.04)';
+    ctx.fill();
+
+    // Quad outline
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.strokeStyle = '#00e676';
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Draw diagonals
+    // Diagonals
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     ctx.lineTo(pts[2][0], pts[2][1]);
     ctx.moveTo(pts[1][0], pts[1][1]);
     ctx.lineTo(pts[3][0], pts[3][1]);
-    ctx.strokeStyle = 'rgba(0, 255, 136, 0.3)';
+    ctx.strokeStyle = 'rgba(0, 230, 118, 0.15)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Draw control points
+    // Control points
     const labels = ['TL', 'TR', 'BR', 'BL'];
     pts.forEach(([x, y], i) => {
+      // Outer ring
       ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI * 2);
-      ctx.fillStyle = dragging === i ? '#ff4444' : '#00ff88';
+      ctx.arc(x, y, 12, 0, Math.PI * 2);
+      ctx.fillStyle = dragging === i ? 'rgba(255, 68, 102, 0.3)' : 'rgba(0, 230, 118, 0.2)';
       ctx.fill();
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.stroke();
 
+      // Inner dot
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI * 2);
+      ctx.fillStyle = dragging === i ? '#ff4466' : '#00e676';
+      ctx.fill();
+
+      // Label
       ctx.fillStyle = '#000';
-      ctx.font = 'bold 10px sans-serif';
+      ctx.font = 'bold 8px Inter, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(labels[i], x, y);
     });
   }, [surface, dragging, status]);
 
-  useEffect(() => {
-    drawOverlay();
-  }, [drawOverlay]);
+  useEffect(() => { drawOverlay(); }, [drawOverlay]);
 
-  // Redraw on image load
   useEffect(() => {
     const img = imgRef.current;
     if (!img) return;
@@ -113,18 +120,15 @@ export function App() {
     return () => observer.disconnect();
   }, [drawOverlay]);
 
-  // Mouse/touch handlers for dragging control points
+  // Pointer handlers
   const getPointIndex = (clientX: number, clientY: number): number | null => {
     const canvas = canvasRef.current;
     if (!canvas || !surface || !status) return null;
-
     const rect = canvas.getBoundingClientRect();
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-
     const scaleX = canvas.width / status.resolution[0];
     const scaleY = canvas.height / status.resolution[1];
-
     for (let i = 0; i < surface.dst_points.length; i++) {
       const px = surface.dst_points[i][0] * scaleX;
       const py = surface.dst_points[i][1] * scaleY;
@@ -135,7 +139,6 @@ export function App() {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if (recordingRef.current) {
-      // Start capturing motion path
       e.currentTarget.setPointerCapture(e.pointerId);
       const canvas = canvasRef.current;
       if (!canvas || !status) return;
@@ -148,7 +151,6 @@ export function App() {
       recordPointsRef.current = [[Math.round(x), Math.round(y), 0]];
       return;
     }
-
     const idx = getPointIndex(e.clientX, e.clientY);
     if (idx !== null) {
       setDragging(idx);
@@ -166,30 +168,23 @@ export function App() {
       const x = (e.clientX - rect.left) * scaleX;
       const y = (e.clientY - rect.top) * scaleY;
       const t = (performance.now() - recordStartRef.current) / 1000;
-      // Sample at ~30fps to avoid too many points
       const last = recordPointsRef.current[recordPointsRef.current.length - 1];
       if (t - last[2] >= 0.033) {
         recordPointsRef.current.push([Math.round(x), Math.round(y), parseFloat(t.toFixed(3))]);
       }
       return;
     }
-
     if (dragging === null || !surface || !status) return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
     const scaleX = status.resolution[0] / canvas.width;
     const scaleY = status.resolution[1] / canvas.height;
-
     const newPoints = surface.dst_points.map((p, i) =>
       i === dragging ? [Math.round(x * scaleX), Math.round(y * scaleY)] : [...p]
     );
-
     dragPointsRef.current = newPoints;
     setSurfaces(prev => prev.map(s =>
       s.id === surface.id ? { ...s, dst_points: newPoints } : s
@@ -198,7 +193,6 @@ export function App() {
 
   const handlePointerUp = async () => {
     if (recordingRef.current && recordPointsRef.current.length > 1) {
-      // Save the recorded motion
       const pts = recordPointsRef.current;
       const name = `Motion ${motions.length + 1}`;
       const created = await api.motions.create({ name, points: pts });
@@ -208,7 +202,6 @@ export function App() {
       setRecording(false);
       return;
     }
-
     if (dragging !== null && surface && dragPointsRef.current) {
       api.surfaces.update(surface.id, { dst_points: dragPointsRef.current });
     }
@@ -216,7 +209,6 @@ export function App() {
     setDragging(null);
   };
 
-  // File upload
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -225,7 +217,6 @@ export function App() {
     setSources(updated);
   };
 
-  // Create new surface
   const handleCreateSurface = async () => {
     const name = `Oberfläche ${surfaces.length + 1}`;
     const source = sources.length > 0 ? sources[0].filename : '';
@@ -234,78 +225,64 @@ export function App() {
     setActiveSurface(created.id);
   };
 
+  const statusLabel = status?.playing ? 'Playing' : status?.running ? 'Ready' : 'Offline';
+  const statusClass = status?.playing ? 'playing' : status?.running ? 'ready' : 'offline';
+
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
+    <div className="app">
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 'bold', color: '#00ff88' }}>👻 PhantomCast</h1>
-          <p style={{ fontSize: 12, color: '#888' }}>Projection Mapping Control</p>
+      <header className="header">
+        <div className="header-brand">
+          <span className="header-logo">PhantomCast</span>
+          <span className="header-sub">Projection Mapping</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            width: 8, height: 8, borderRadius: '50%',
-            background: status?.playing ? '#00ff88' : status?.running ? '#ffaa00' : '#ff4444',
-          }} />
-          <span style={{ fontSize: 12, color: '#aaa' }}>
-            {status?.playing ? 'Playing' : status?.running ? 'Ready' : 'Offline'}
-          </span>
+        <div className="header-status">
+          <span className={`status-dot ${statusClass}`} />
+          <span>{statusLabel}</span>
+          {status?.resolution && (
+            <span style={{ color: 'var(--text-muted)', marginLeft: 8, fontSize: 11, fontFamily: 'monospace' }}>
+              {status.resolution[0]}x{status.resolution[1]}
+            </span>
+          )}
         </div>
-      </div>
+      </header>
 
-      {/* Preview + Calibration */}
-      <div style={{ position: 'relative', marginBottom: 16, background: '#111', borderRadius: 8, overflow: 'hidden' }}>
-        <img
-          ref={imgRef}
-          src="/api/preview.mjpeg"
-          alt="Preview"
-          style={{ width: '100%', display: 'block' }}
-          onLoad={drawOverlay}
-        />
-        <canvas
-          ref={canvasRef}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', cursor: recording ? 'cell' : dragging !== null ? 'grabbing' : 'crosshair' }}
-        />
-      </div>
-
-      {/* Controls */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      {/* Sidebar */}
+      <aside className="sidebar">
         {/* Playback */}
-        <div style={{ background: '#111', borderRadius: 8, padding: 16 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#ccc' }}>Wiedergabe</h3>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => api.playback.start()} style={btnStyle}>▶ Play</button>
-            <button onClick={() => api.playback.pause()} style={btnStyle}>⏸ Pause</button>
-            <button onClick={() => api.playback.stop()} style={btnStyle}>⏹ Stop</button>
-            <button onClick={() => api.playback.sync()} style={btnStyle}>⟳ Sync</button>
+        <div className="sidebar-section">
+          <h3>Wiedergabe</h3>
+          <div className="btn-group" style={{ marginBottom: 8 }}>
+            <button className="btn" onClick={() => api.playback.start()}>Play</button>
+            <button className="btn" onClick={() => api.playback.pause()}>Pause</button>
+            <button className="btn" onClick={() => api.playback.stop()}>Stop</button>
+            <button className="btn" onClick={() => api.playback.sync()}>Sync</button>
           </div>
           {status?.current_source && (
-            <p style={{ fontSize: 11, color: '#888', marginTop: 8 }}>
-              Aktuell: {status.current_source}
-            </p>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', padding: '4px 0' }}>
+              {status.current_source}
+            </div>
           )}
         </div>
 
         {/* Surfaces */}
-        <div style={{ background: '#111', borderRadius: 8, padding: 16 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#ccc' }}>Oberflächen</h3>
+        <div className="sidebar-section">
+          <h3>Oberflächen</h3>
           {surfaces.map(s => (
-            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <div key={s.id} className="surface-item">
               <button
+                className={`btn ${activeSurface === s.id ? 'btn-active' : ''}`}
                 onClick={() => setActiveSurface(s.id)}
-                style={{
-                  ...btnStyle,
-                  flex: 1,
-                  background: activeSurface === s.id ? '#00ff8833' : '#222',
-                  borderColor: activeSurface === s.id ? '#00ff88' : '#333',
-                }}
               >
+                <span style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: s.enabled ? 'var(--accent)' : 'var(--text-muted)',
+                  flexShrink: 0,
+                }} />
                 {s.name}
               </button>
               <button
+                className="btn btn-icon btn-danger"
                 onClick={async () => {
                   await api.surfaces.delete(s.id);
                   setSurfaces(prev => prev.filter(sf => sf.id !== s.id));
@@ -313,213 +290,217 @@ export function App() {
                     setActiveSurface(surfaces.find(sf => sf.id !== s.id)?.id ?? null);
                   }
                 }}
-                style={{ ...btnStyle, padding: '8px 10px', color: '#ff4444', borderColor: '#441111' }}
-                title="Oberfläche löschen"
+                title="Löschen"
               >
-                ✕
+                ×
               </button>
             </div>
           ))}
-          <button onClick={handleCreateSurface} style={{ ...btnStyle, width: '100%', marginTop: 8 }}>
+          <button className="btn btn-full" onClick={handleCreateSurface} style={{ marginTop: 6 }}>
             + Neue Oberfläche
           </button>
         </div>
-      </div>
 
-      {/* Content & Source Selection */}
-      <div style={{ background: '#111', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#ccc' }}>Content</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          {sources.map(s => (
-            <button
-              key={s.filename}
-              onClick={() => {
-                if (surface) {
-                  api.surfaces.update(surface.id, { source: s.filename });
-                  setSurfaces(prev => prev.map(sf =>
-                    sf.id === surface.id ? { ...sf, source: s.filename } : sf
-                  ));
-                }
-                api.playback.start(s.filename);
-              }}
-              style={{
-                ...btnStyle,
-                background: surface?.source === s.filename ? '#00ff8833' : '#222',
-                borderColor: surface?.source === s.filename ? '#00ff88' : '#333',
-              }}
-            >
-              {s.type === 'video' ? '🎬' : '🖼'} {s.filename}
-              <span style={{ fontSize: 10, color: '#666', marginLeft: 4 }}>
-                ({(s.size_bytes / 1024 / 1024).toFixed(1)}MB)
-              </span>
-            </button>
-          ))}
+        {/* Content */}
+        <div className="sidebar-section">
+          <h3>Content</h3>
+          <div className="content-grid">
+            {sources.map(s => (
+              <div key={s.filename} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <button
+                  className={`btn content-item ${surface?.source === s.filename ? 'btn-active' : ''}`}
+                  style={{ flex: 1, justifyContent: 'flex-start' }}
+                  onClick={() => {
+                    if (surface) {
+                      api.surfaces.update(surface.id, { source: s.filename });
+                      setSurfaces(prev => prev.map(sf =>
+                        sf.id === surface.id ? { ...sf, source: s.filename } : sf
+                      ));
+                    }
+                    api.playback.start(s.filename);
+                  }}
+                >
+                  {s.filename}
+                  <span className="file-size">
+                    {(s.size_bytes / 1024 / 1024).toFixed(1)}M
+                  </span>
+                </button>
+                <button
+                  className="btn btn-icon btn-danger"
+                  onClick={async () => {
+                    await api.sources.delete(s.filename);
+                    setSources(prev => prev.filter(sf => sf.filename !== s.filename));
+                  }}
+                  title="Löschen"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <label className="btn upload-label" style={{ marginTop: 8 }}>
+            + Hochladen
+            <input type="file" accept="video/*,image/*" onChange={handleUpload} />
+          </label>
         </div>
-        <label style={{ ...btnStyle, display: 'inline-block', cursor: 'pointer' }}>
-          📁 Video hochladen
-          <input type="file" accept="video/*,image/*" onChange={handleUpload} style={{ display: 'none' }} />
-        </label>
-      </div>
 
-      {/* Motions */}
-      <div style={{ background: '#111', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#ccc' }}>Animationen</h3>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        {/* Motions */}
+        <div className="sidebar-section">
+          <h3>Animationen</h3>
           <button
+            className={`btn btn-full ${recording ? 'btn-record active' : 'btn-record'}`}
             onClick={() => {
               const next = !recording;
               setRecording(next);
               recordingRef.current = next;
               if (next) recordPointsRef.current = [];
             }}
-            style={{
-              ...btnStyle,
-              background: recording ? '#ff444433' : '#222',
-              borderColor: recording ? '#ff4444' : '#333',
-              color: recording ? '#ff4444' : '#e5e5e5',
-            }}
           >
-            {recording ? '⏺ Aufnahme läuft — zeichne auf der Vorschau!' : '⏺ Neue Animation aufnehmen'}
+            {recording ? 'Aufnahme aktiv...' : 'Aufnehmen'}
           </button>
-          <button
-            onClick={() => {
-              window.open('/api/motions/export/all', '_blank');
-            }}
-            style={btnStyle}
-          >
-            💾 Exportieren
-          </button>
-          <label style={{ ...btnStyle, display: 'inline-block', cursor: 'pointer' }}>
-            📂 Importieren
-            <input type="file" accept=".json" onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const form = new FormData();
-              form.append('file', file);
-              const res = await fetch('/api/motions/import', { method: 'POST', body: form });
-              if (res.ok) {
-                const data = await res.json();
-                setMotions(prev => [...prev, ...data.motions]);
-              }
-              e.target.value = '';
-            }} style={{ display: 'none' }} />
-          </label>
+          {motions.length > 0 && (
+            <div className="motion-list" style={{ marginTop: 8 }}>
+              {motions.map(m => (
+                <div key={m.id} className="motion-item">
+                  <button
+                    className={`btn ${m.enabled ? 'btn-active' : ''}`}
+                    style={{ flex: 1, justifyContent: 'flex-start', fontSize: 11 }}
+                    onClick={async () => {
+                      const toggled = !m.enabled;
+                      await api.motions.update(m.id, { enabled: toggled });
+                      setMotions(prev => prev.map(mo =>
+                        mo.id === m.id ? { ...mo, enabled: toggled } : mo
+                      ));
+                    }}
+                  >
+                    {m.name}
+                    <span className="motion-meta">{m.duration.toFixed(1)}s</span>
+                  </button>
+                  <button
+                    className="btn btn-icon btn-danger"
+                    onClick={async () => {
+                      await api.motions.delete(m.id);
+                      setMotions(prev => prev.filter(mo => mo.id !== m.id));
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+            <button className="btn" style={{ flex: 1, fontSize: 11 }}
+              onClick={() => window.open('/api/motions/export/all', '_blank')}
+            >
+              Export
+            </button>
+            <label className="btn upload-label" style={{ flex: 1, fontSize: 11, justifyContent: 'center' }}>
+              Import
+              <input type="file" accept=".json" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const form = new FormData();
+                form.append('file', file);
+                const res = await fetch('/api/motions/import', { method: 'POST', body: form });
+                if (res.ok) {
+                  const data = await res.json();
+                  setMotions(prev => [...prev, ...data.motions]);
+                }
+                e.target.value = '';
+              }} />
+            </label>
+          </div>
         </div>
-        {motions.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {motions.map(m => (
-              <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  onClick={async () => {
-                    const toggled = !m.enabled;
-                    await api.motions.update(m.id, { enabled: toggled });
-                    setMotions(prev => prev.map(mo =>
-                      mo.id === m.id ? { ...mo, enabled: toggled } : mo
-                    ));
-                  }}
-                  style={{
-                    ...btnStyle, flex: 1,
-                    background: m.enabled ? '#00ff8833' : '#222',
-                    borderColor: m.enabled ? '#00ff88' : '#333',
-                  }}
-                >
-                  {m.name} ({m.duration.toFixed(1)}s, {m.points.length} Punkte)
-                </button>
-                <button
-                  onClick={async () => {
-                    await api.motions.delete(m.id);
-                    setMotions(prev => prev.filter(mo => mo.id !== m.id));
-                  }}
-                  style={{ ...btnStyle, padding: '8px 10px', color: '#ff4444', borderColor: '#441111' }}
-                  title="Animation löschen"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+      </aside>
+
+      {/* Main Content */}
+      <main className="main">
+        {/* Preview */}
+        <div className="preview-container">
+          <img
+            ref={imgRef}
+            src="/api/preview.mjpeg"
+            alt="Preview"
+            onLoad={drawOverlay}
+          />
+          <canvas
+            ref={canvasRef}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            style={{ cursor: recording ? 'cell' : dragging !== null ? 'grabbing' : 'crosshair' }}
+          />
+          <div className="preview-badge">LIVE</div>
+          {recording && <div className="preview-recording-badge">REC</div>}
+        </div>
+
+        {/* Surface Details */}
+        {surface && (
+          <div className="card">
+            <div className="card-title">
+              <span className="card-title-icon">◆</span>
+              {surface.name} — Kalibrierung
+            </div>
+
+            {/* Coordinates */}
+            <div className="coord-grid">
+              {['Oben Links', 'Oben Rechts', 'Unten Rechts', 'Unten Links'].map((label, i) => (
+                <div key={i} className="coord-cell">
+                  <div className="coord-label">{label}</div>
+                  {['X', 'Y'].map((axis, ai) => (
+                    <div key={axis} className="coord-input-row">
+                      <span>{axis}</span>
+                      <input
+                        type="number"
+                        value={surface.dst_points[i]?.[ai] ?? 0}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          const newPoints = surface.dst_points.map((p, pi) =>
+                            pi === i ? (ai === 0 ? [val, p[1]] : [p[0], val]) : [...p]
+                          );
+                          setSurfaces(prev => prev.map(s =>
+                            s.id === surface.id ? { ...s, dst_points: newPoints } : s
+                          ));
+                          api.surfaces.update(surface.id, { dst_points: newPoints });
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="actions-bar" style={{ marginTop: 14 }}>
+              <button
+                className={`btn ${surface.show_grid ? 'btn-active' : ''}`}
+                onClick={() => {
+                  const toggled = !surface.show_grid;
+                  api.surfaces.update(surface.id, { show_grid: toggled });
+                  setSurfaces(prev => prev.map(s =>
+                    s.id === surface.id ? { ...s, show_grid: toggled } : s
+                  ));
+                }}
+              >
+                {surface.show_grid ? 'Raster ausblenden' : 'Raster einblenden'}
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  const reset = [[0, 0], [1920, 0], [1920, 1080], [0, 1080]];
+                  api.surfaces.update(surface.id, { dst_points: reset });
+                  setSurfaces(prev => prev.map(s =>
+                    s.id === surface.id ? { ...s, dst_points: reset } : s
+                  ));
+                }}
+              >
+                Kalibrierung zurücksetzen
+              </button>
+            </div>
           </div>
         )}
-      </div>
-
-      {/* Surface Details */}
-      {surface && (
-        <div style={{ background: '#111', borderRadius: 8, padding: 16 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#ccc' }}>
-            {surface.name} — Koordinaten
-          </h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, fontSize: 11, color: '#aaa' }}>
-            {['Oben Links', 'Oben Rechts', 'Unten Rechts', 'Unten Links'].map((label, i) => (
-              <div key={i} style={{ background: '#1a1a1a', padding: 8, borderRadius: 4, textAlign: 'center' }}>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>{label}</div>
-                {['X', 'Y'].map((axis, ai) => (
-                  <div key={axis} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginTop: 4 }}>
-                    <span>{axis}:</span>
-                    <input
-                      type="number"
-                      value={surface.dst_points[i]?.[ai] ?? 0}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 0;
-                        const newPoints = surface.dst_points.map((p, pi) =>
-                          pi === i ? (ai === 0 ? [val, p[1]] : [p[0], val]) : [...p]
-                        );
-                        setSurfaces(prev => prev.map(s =>
-                          s.id === surface.id ? { ...s, dst_points: newPoints } : s
-                        ));
-                        api.surfaces.update(surface.id, { dst_points: newPoints });
-                      }}
-                      style={{
-                        width: 60, padding: '4px 6px', fontSize: 11,
-                        background: '#222', color: '#e5e5e5', border: '1px solid #444',
-                        borderRadius: 4, textAlign: 'center',
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button
-              onClick={() => {
-                const toggled = !surface.show_grid;
-                api.surfaces.update(surface.id, { show_grid: toggled });
-                setSurfaces(prev => prev.map(s =>
-                  s.id === surface.id ? { ...s, show_grid: toggled } : s
-                ));
-              }}
-              style={{
-                ...btnStyle, flex: 1,
-                background: surface.show_grid ? '#00ff8833' : '#222',
-                borderColor: surface.show_grid ? '#00ff88' : '#333',
-              }}
-            >
-              {surface.show_grid ? '▦ Raster ausblenden' : '▦ Raster einblenden'}
-            </button>
-            <button
-              onClick={() => {
-                const reset = [[0, 0], [1920, 0], [1920, 1080], [0, 1080]];
-                api.surfaces.update(surface.id, { dst_points: reset });
-                setSurfaces(prev => prev.map(s =>
-                  s.id === surface.id ? { ...s, dst_points: reset } : s
-                ));
-              }}
-              style={{ ...btnStyle, flex: 1 }}
-            >
-              🔄 Kalibrierung zurücksetzen
-            </button>
-          </div>
-        </div>
-      )}
+      </main>
     </div>
   );
 }
-
-const btnStyle: React.CSSProperties = {
-  padding: '8px 16px',
-  fontSize: 13,
-  background: '#222',
-  color: '#e5e5e5',
-  border: '1px solid #333',
-  borderRadius: 6,
-  cursor: 'pointer',
-};
