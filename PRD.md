@@ -207,8 +207,8 @@ PUT  /api/config               Konfiguration aktualisieren
 | Active Cooler | Pi 5 Lüfter | ✅ Ja |
 | MicroSD | 64GB A2 | ✅ Ja |
 | USB-C Netzteil | 27W offiziell | ✅ Ja |
-| Micro-HDMI Kabel | HDMI 2.0, 3m | ⬜ Prüfen |
-| Beamer | mind. 3.000 Lumen | ⬜ Kaufen/Leihen |
+| Micro-HDMI Kabel | HDMI 2.0, 3m | ✅ Ja |
+| Beamer | 3.000+ Lumen | ✅ Ja |
 
 ### Optional (Outdoor)
 | Komponente | Spezifikation | Kosten |
@@ -277,13 +277,14 @@ Für Halloween-Nachtprojektionen reichen 3.000-4.000 Lumen auf einer hellen Haus
 
 ---
 
-## 11. Offene Fragen
+## 11. Geklärte Fragen (Stand 2026-04-05)
 
-1. Beamer bereits vorhanden oder muss einer gekauft/geliehen werden?
-2. Welche Oberfläche soll bespielt werden? (Hauswand, Fenster, Garage?)
-3. Sollen vorproduzierte Videos (AtmosFX) oder eigene Inhalte verwendet werden?
-4. Budget für Beamer?
-5. Soll PhantomCast auch außerhalb von Halloween nutzbar sein? (Geburtstage, Partys, Kunst?)
+1. **Beamer:** Vorhanden, 3.000+ Lumen, leistungsstark ✅
+2. **Oberflächen:** Hauswand, Fenster, Garage, Innenraum — flexibel je nach Einsatz ✅
+3. **Content:** AtmosFX Videos + eigene Inhalte ✅
+4. **Budget:** Offen (Hardware vorhanden, Software-Fokus) ✅
+5. **Micro-HDMI:** Vorhanden ✅
+6. **Plattform:** Muss auf Raspberry Pi laufen (kein PC) ✅
 
 ---
 

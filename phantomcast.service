@@ -1,0 +1,15 @@
+[Unit]
+Description=PhantomCast Projection Mapping
+After=network.target
+
+[Service]
+Type=simple
+User=macoso
+WorkingDirectory=/home/macoso/Projects/phantomcast
+Environment=DISPLAY=:0
+ExecStart=/home/macoso/Projects/phantomcast/.venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
