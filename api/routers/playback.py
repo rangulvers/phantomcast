@@ -39,3 +39,10 @@ def resume_playback(request: Request):
     renderer.paused = False
     renderer.playing = True
     return {"playing": True, "paused": False}
+
+
+@router.post("/sync")
+def sync_playback(request: Request):
+    renderer: Renderer = request.app.state.renderer
+    renderer.sync_all()
+    return {"synced": True}

@@ -21,6 +21,7 @@ class SurfaceUpdate(BaseModel):
     enabled: bool | None = None
     loop: bool | None = None
     opacity: float | None = None
+    show_grid: bool | None = None
     dst_points: list[list[float]] | None = None
 
 
@@ -60,12 +61,15 @@ def update_surface(surface_id: str, body: SurfaceUpdate, request: Request):
         surface.name = body.name
     if body.source is not None:
         surface.source = body.source
+        renderer.reload_surface_source(surface_id)
     if body.enabled is not None:
         surface.enabled = body.enabled
     if body.loop is not None:
         surface.loop = body.loop
     if body.opacity is not None:
         surface.opacity = body.opacity
+    if body.show_grid is not None:
+        surface.show_grid = body.show_grid
     if body.dst_points is not None:
         surface.dst_points = body.dst_points
         renderer.update_surface(surface_id, body.dst_points)

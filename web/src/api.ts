@@ -13,6 +13,7 @@ export interface Surface {
   source: string;
   loop: boolean;
   opacity: number;
+  show_grid: boolean;
   src_points: number[][];
   dst_points: number[][];
 }
@@ -32,6 +33,17 @@ export interface Status {
   current_source: string;
   resolution: number[];
   surfaces: number;
+}
+
+export interface Motion {
+  id: string;
+  name: string;
+  points: number[][];
+  color: number[];
+  trail_length: number;
+  dot_size: number;
+  enabled: boolean;
+  duration: number;
 }
 
 export const api = {
@@ -78,6 +90,25 @@ export const api = {
     stop: () => fetchJson<{ playing: boolean }>('/playback/stop', { method: 'POST' }),
     pause: () => fetchJson<{ paused: boolean }>('/playback/pause', { method: 'POST' }),
     resume: () => fetchJson<{ playing: boolean }>('/playback/resume', { method: 'POST' }),
+    sync: () => fetchJson<{ synced: boolean }>('/playback/sync', { method: 'POST' }),
+  },
+
+  motions: {
+    list: () => fetchJson<Motion[]>('/motions'),
+    create: (data: { name: string; points: number[][]; color?: number[]; trail_length?: number; dot_size?: number }) =>
+      fetchJson<Motion>('/motions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: Partial<Motion>) =>
+      fetchJson<Motion>(`/motions/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      fetchJson<{ deleted: string }>(`/motions/${id}`, { method: 'DELETE' }),
   },
 
   previewUrl: `${BASE}/preview.mjpeg`,

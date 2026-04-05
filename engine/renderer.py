@@ -20,7 +20,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from .warp import ProjectConfig, Surface
+from .warp import Motion, ProjectConfig, Surface
 
 logger = logging.getLogger(__name__)
 
@@ -64,34 +64,34 @@ class FramebufferOutput:
         if not self._available or self._fbmap is None:
             return
 
-        # Resize to framebuffer dimensions if needed
-        if frame.shape[1] != self.width or frame.shape[0] != self.height:
-            frame = cv2.resize(frame, (self.width, self.height))
+        row_bytes = self.width * self.bpp
+        needs_resize = frame.shape[1] != self.width or frame.shape[0] != self.height
 
         if self.bpp == 4:
-            # BGRA — add alpha channel
-            bgra = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
-            # Write row by row (line_length may include padding)
-            for y in range(self.height):
-                offset = y * self._line_length
-                row_data = bgra[y].tobytes()
-                self._fbmap[offset:offset + self.width * 4] = row_data
+            # BGRA — convert before resize (cheaper at lower res)
+            pixels = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
+            if needs_resize:
+                pixels = cv2.resize(pixels, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
         elif self.bpp == 2:
-            # RGB565
-            r = (frame[:, :, 2] >> 3).astype(np.uint16)
-            g = (frame[:, :, 1] >> 2).astype(np.uint16)
-            b = (frame[:, :, 0] >> 3).astype(np.uint16)
-            rgb565 = (r << 11) | (g << 5) | b
-            for y in range(self.height):
-                offset = y * self._line_length
-                row_data = rgb565[y].tobytes()
-                self._fbmap[offset:offset + self.width * 2] = row_data
+            # RGB565 — use OpenCV native conversion, then upscale
+            pixels = cv2.cvtColor(frame, cv2.COLOR_BGR2BGR565)
+            if needs_resize:
+                pixels = cv2.resize(pixels, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
         elif self.bpp == 3:
-            # BGR24
+            pixels = frame
+            if needs_resize:
+                pixels = cv2.resize(pixels, (self.width, self.height), interpolation=cv2.INTER_NEAREST)
+        else:
+            return
+
+        data = pixels.tobytes()
+        if self._line_length == row_bytes:
+            self._fbmap[:self.height * row_bytes] = data
+        else:
             for y in range(self.height):
                 offset = y * self._line_length
-                row_data = frame[y].tobytes()
-                self._fbmap[offset:offset + self.width * 3] = row_data
+                row_start = y * row_bytes
+                self._fbmap[offset:offset + row_bytes] = data[row_start:row_start + row_bytes]
 
     def close(self) -> None:
         if self._fbmap:
@@ -147,9 +147,10 @@ class Renderer:
         self.content_dir = content_dir
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._cap: Optional[cv2.VideoCapture] = None
-        self._current_source: str = ""
         self._lock = threading.Lock()
+
+        # Per-surface video captures: surface_id -> VideoCapture
+        self._caps: dict[str, cv2.VideoCapture] = {}
 
         # Framebuffer output (works headless, no X11)
         self._fb = FramebufferOutput()
@@ -161,6 +162,7 @@ class Renderer:
         # Playback state
         self.playing = False
         self.paused = False
+        self._motion_start_time: float = 0.0
 
     def start(self) -> None:
         """Start the rendering loop in a background thread."""
@@ -184,25 +186,47 @@ class Renderer:
         self._running = False
         if self._thread:
             self._thread.join(timeout=5)
-        if self._cap:
-            self._cap.release()
-            self._cap = None
+        with self._lock:
+            for cap in self._caps.values():
+                cap.release()
+            self._caps.clear()
         self._fb.close()
         logger.info("Renderer stopped")
 
     def play(self, source: Optional[str] = None) -> bool:
-        """Start playback. If source is given, switch to it."""
+        """Start playback. If source is given, load it for the first matching surface."""
         if source:
-            return self._load_source(source)
-        if self._cap and self._cap.isOpened():
-            self.playing = True
-            self.paused = False
-            return True
-        # Try to load first surface's source
-        for surface in self.config.surfaces:
-            if surface.enabled and surface.source:
-                return self._load_source(surface.source)
-        return False
+            # Find surface that uses this source, or the first enabled surface
+            with self._lock:
+                for surface in self.config.surfaces:
+                    if surface.enabled and (surface.source == source or not surface.source):
+                        surface.source = source
+                        self._open_surface_source(surface)
+                        break
+                else:
+                    # No match — load on first enabled surface
+                    for surface in self.config.surfaces:
+                        if surface.enabled:
+                            surface.source = source
+                            self._open_surface_source(surface)
+                            break
+        else:
+            # Open all surfaces that have a source but no capture yet
+            with self._lock:
+                for surface in self.config.surfaces:
+                    if surface.enabled and surface.source and surface.id not in self._caps:
+                        self._open_surface_source(surface)
+
+        self.playing = True
+        self.paused = False
+        return True
+
+    def sync_all(self) -> None:
+        """Reset all surface video captures to frame 0 for synchronized playback."""
+        with self._lock:
+            for cap in self._caps.values():
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        logger.info("All surfaces synced to frame 0")
 
     def pause(self) -> None:
         self.paused = True
@@ -210,30 +234,40 @@ class Renderer:
     def stop_playback(self) -> None:
         self.playing = False
         self.paused = False
-        if self._cap:
-            self._cap.release()
-            self._cap = None
+        with self._lock:
+            for cap in self._caps.values():
+                cap.release()
+            self._caps.clear()
 
-    def _load_source(self, filename: str) -> bool:
-        """Load a video file for playback."""
-        path = self.content_dir / filename
+    def _open_surface_source(self, surface: Surface) -> bool:
+        """Open a video capture for a specific surface. Must hold self._lock."""
+        if not surface.source:
+            return False
+        path = self.content_dir / surface.source
         if not path.exists():
             logger.error("Source file not found: %s", path)
             return False
 
+        # Release existing capture for this surface
+        if surface.id in self._caps:
+            self._caps[surface.id].release()
+
+        cap = cv2.VideoCapture(str(path))
+        if not cap.isOpened():
+            logger.error("Failed to open video: %s", path)
+            return False
+
+        self._caps[surface.id] = cap
+        logger.info("Surface %s playing: %s", surface.id, surface.source)
+        return True
+
+    def reload_surface_source(self, surface_id: str) -> bool:
+        """Reload video capture when a surface's source changes."""
         with self._lock:
-            if self._cap:
-                self._cap.release()
-            self._cap = cv2.VideoCapture(str(path))
-            if not self._cap.isOpened():
-                logger.error("Failed to open video: %s", path)
-                self._cap = None
-                return False
-            self._current_source = filename
-            self.playing = True
-            self.paused = False
-            logger.info("Playing: %s", filename)
-            return True
+            for surface in self.config.surfaces:
+                if surface.id == surface_id:
+                    return self._open_surface_source(surface)
+        return False
 
     def get_preview_jpeg(self, quality: int = 60) -> Optional[bytes]:
         """Get the current preview frame as JPEG bytes."""
@@ -250,7 +284,7 @@ class Renderer:
             "running": self._running,
             "playing": self.playing,
             "paused": self.paused,
-            "current_source": self._current_source,
+            "current_source": ", ".join(s.source for s in self.config.surfaces if s.enabled and s.source),
             "resolution": list(self.config.resolution),
             "surfaces": len(self.config.surfaces),
             "framebuffer": self._fb._available,
@@ -267,7 +301,7 @@ class Renderer:
         return False
 
     def _render_loop(self) -> None:
-        """Main render loop — reads frames, applies warp, outputs to framebuffer + preview."""
+        """Main render loop — reads per-surface frames, applies warp, composites output."""
         w, h = self.config.resolution
 
         # Black frame as default
@@ -278,49 +312,94 @@ class Renderer:
         while self._running:
             t0 = time.monotonic()
 
-            if not self.playing or self.paused or self._cap is None:
-                # Show black when not playing
-                output = black.copy()
-                self._output_and_preview(output, w, h)
-                elapsed = time.monotonic() - t0
-                time.sleep(max(0, frame_time - elapsed))
-                continue
-
-            with self._lock:
-                ret, frame = self._cap.read()
-
-            if not ret:
-                # Video ended — loop or stop
-                active_surface = self._get_active_surface()
-                if active_surface and active_surface.loop:
-                    self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
-                else:
-                    self.playing = False
-                    continue
-
-            # Resize frame to output resolution
-            if frame.shape[1] != w or frame.shape[0] != h:
-                frame = cv2.resize(frame, (w, h))
-
-            # Apply warp for each enabled surface
             output = black.copy()
+
             with self._lock:
                 for surface in self.config.surfaces:
                     if not surface.enabled:
                         continue
-                    warped = surface.warp_frame(frame, (w, h))
+
+                    # Read this surface's video frame
+                    frame = None
+                    if self.playing and not self.paused and surface.id in self._caps:
+                        cap = self._caps[surface.id]
+                        ret, frame = cap.read()
+                        if not ret:
+                            if surface.loop:
+                                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                                ret, frame = cap.read()
+                            if not ret:
+                                frame = None
+
+                        if frame is not None and (frame.shape[1] != w or frame.shape[0] != h):
+                            frame = cv2.resize(frame, (w, h))
+
+                    # Determine what to render for this surface
+                    if surface.show_grid:
+                        grid_frame = frame.copy() if frame is not None else np.zeros((h, w, 3), dtype=np.uint8)
+                        self._draw_grid(grid_frame, surface)
+                        warped = surface.warp_frame(grid_frame, (w, h))
+                    elif frame is not None:
+                        warped = surface.warp_frame(frame, (w, h))
+                    else:
+                        continue
+
+                    # Composite onto output
                     if surface.opacity < 1.0:
                         output = cv2.addWeighted(output, 1.0, warped, surface.opacity, 0)
                     else:
-                        # Use warped pixels where they are non-black
                         mask = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY) > 0
                         output[mask] = warped[mask]
+
+            # Draw motion trails on output (projector space)
+            with self._lock:
+                for motion in self.config.motions:
+                    if motion.enabled and motion.points and motion.duration > 0:
+                        self._draw_motion(output, motion, t0)
 
             self._output_and_preview(output, w, h)
 
             elapsed = time.monotonic() - t0
             time.sleep(max(0, frame_time - elapsed))
+
+    def _draw_motion(self, frame: np.ndarray, motion: Motion, now: float) -> None:
+        """Draw a motion trail animation on the output frame."""
+        if not self._motion_start_time:
+            self._motion_start_time = now
+
+        elapsed = (now - self._motion_start_time) % motion.duration
+        color = tuple(motion.color)
+        trail_t = motion.trail_length
+
+        for i in range(len(motion.points) - 1):
+            x1, y1, t1 = motion.points[i]
+            x2, y2, t2 = motion.points[i + 1]
+
+            # Draw trail segments within the trail window
+            if t2 < elapsed - trail_t or t1 > elapsed:
+                continue
+
+            # Calculate opacity based on age
+            age = elapsed - t2
+            if age < 0:
+                # This segment includes the current head position
+                # Interpolate head position
+                frac = (elapsed - t1) / max(t2 - t1, 0.001)
+                frac = max(0.0, min(1.0, frac))
+                hx = int(x1 + (x2 - x1) * frac)
+                hy = int(y1 + (y2 - y1) * frac)
+                # Draw head dot (bright)
+                cv2.circle(frame, (hx, hy), motion.dot_size, color, -1, cv2.LINE_AA)
+                # Glow
+                cv2.circle(frame, (hx, hy), motion.dot_size * 2, color, 1, cv2.LINE_AA)
+                # Draw segment up to head
+                cv2.line(frame, (int(x1), int(y1)), (hx, hy), color, max(2, motion.dot_size // 2), cv2.LINE_AA)
+            else:
+                # Trail segment — fade based on age
+                alpha = max(0.0, 1.0 - age / trail_t)
+                faded = tuple(int(c * alpha) for c in color)
+                thickness = max(1, int(motion.dot_size // 2 * alpha))
+                cv2.line(frame, (int(x1), int(y1)), (int(x2), int(y2)), faded, thickness, cv2.LINE_AA)
 
     def _output_and_preview(self, output: np.ndarray, w: int, h: int) -> None:
         """Write to framebuffer (HDMI) and update preview frame."""
@@ -333,6 +412,31 @@ class Renderer:
         preview = cv2.resize(output, (preview_w, preview_h))
         with self._preview_lock:
             self._preview_frame = preview
+
+    @staticmethod
+    def _draw_grid(frame: np.ndarray, surface: "Surface", cols: int = 8, rows: int = 6) -> None:
+        """Draw a calibration grid on the frame. Works as standalone test pattern or overlay."""
+        h, w = frame.shape[:2]
+        color = (0, 255, 136)  # green
+        thickness = 2
+
+        # Vertical lines
+        for i in range(1, cols):
+            x = int(w * i / cols)
+            cv2.line(frame, (x, 0), (x, h), color, thickness)
+        # Horizontal lines
+        for i in range(1, rows):
+            y = int(h * i / rows)
+            cv2.line(frame, (0, y), (w, y), color, thickness)
+        # Border (bright white for visibility on walls)
+        cv2.rectangle(frame, (2, 2), (w - 3, h - 3), (255, 255, 255), 3)
+        # Center crosshair
+        cx, cy = w // 2, h // 2
+        cv2.line(frame, (cx - 60, cy), (cx + 60, cy), (0, 200, 255), 2)
+        cv2.line(frame, (cx, cy - 60), (cx, cy + 60), (0, 200, 255), 2)
+        # Corner markers
+        for px, py in [(0, 0), (w, 0), (w, h), (0, h)]:
+            cv2.circle(frame, (min(px, w - 1), min(py, h - 1)), 15, (255, 255, 255), -1)
 
     def _get_active_surface(self) -> Optional[Surface]:
         """Get the first enabled surface."""
