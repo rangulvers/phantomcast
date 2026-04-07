@@ -218,7 +218,7 @@ export function App() {
   };
 
   const handleCreateSurface = async () => {
-    const name = `Oberfläche ${surfaces.length + 1}`;
+    const name = `Surface ${surfaces.length + 1}`;
     const source = sources.length > 0 ? sources[0].filename : '';
     const created = await api.surfaces.create(name, source);
     setSurfaces(prev => [...prev, created]);
@@ -251,7 +251,7 @@ export function App() {
       <aside className="sidebar">
         {/* Playback */}
         <div className="sidebar-section">
-          <h3>Wiedergabe</h3>
+          <h3>Playback</h3>
           <div className="btn-group" style={{ marginBottom: 8 }}>
             <button className="btn" onClick={() => api.playback.start()}>Play</button>
             <button className="btn" onClick={() => api.playback.pause()}>Pause</button>
@@ -267,7 +267,7 @@ export function App() {
 
         {/* Surfaces */}
         <div className="sidebar-section">
-          <h3>Oberflächen</h3>
+          <h3>Surfaces</h3>
           {surfaces.map(s => (
             <div key={s.id} className="surface-item">
               <button
@@ -290,14 +290,14 @@ export function App() {
                     setActiveSurface(surfaces.find(sf => sf.id !== s.id)?.id ?? null);
                   }
                 }}
-                title="Löschen"
+                title="Delete"
               >
                 ×
               </button>
             </div>
           ))}
           <button className="btn btn-full" onClick={handleCreateSurface} style={{ marginTop: 6 }}>
-            + Neue Oberfläche
+            + New Surface
           </button>
         </div>
 
@@ -331,7 +331,7 @@ export function App() {
                     await api.sources.delete(s.filename);
                     setSources(prev => prev.filter(sf => sf.filename !== s.filename));
                   }}
-                  title="Löschen"
+                  title="Delete"
                 >
                   ×
                 </button>
@@ -339,14 +339,14 @@ export function App() {
             ))}
           </div>
           <label className="btn upload-label" style={{ marginTop: 8 }}>
-            + Hochladen
+            + Upload
             <input type="file" accept="video/*,image/*" onChange={handleUpload} />
           </label>
         </div>
 
         {/* Motions */}
         <div className="sidebar-section">
-          <h3>Animationen</h3>
+          <h3>Animations</h3>
           <button
             className={`btn btn-full ${recording ? 'btn-record active' : 'btn-record'}`}
             onClick={() => {
@@ -356,7 +356,7 @@ export function App() {
               if (next) recordPointsRef.current = [];
             }}
           >
-            {recording ? 'Aufnahme aktiv...' : 'Aufnehmen'}
+            {recording ? 'Recording...' : 'Record'}
           </button>
           {motions.length > 0 && (
             <div className="motion-list" style={{ marginTop: 8 }}>
@@ -440,12 +440,12 @@ export function App() {
           <div className="card">
             <div className="card-title">
               <span className="card-title-icon">◆</span>
-              {surface.name} — Kalibrierung
+              {surface.name} — Calibration
             </div>
 
             {/* Coordinates */}
             <div className="coord-grid">
-              {['Oben Links', 'Oben Rechts', 'Unten Rechts', 'Unten Links'].map((label, i) => (
+              {['Top Left', 'Top Right', 'Bottom Right', 'Bottom Left'].map((label, i) => (
                 <div key={i} className="coord-cell">
                   <div className="coord-label">{label}</div>
                   {['X', 'Y'].map((axis, ai) => (
@@ -483,7 +483,7 @@ export function App() {
                   ));
                 }}
               >
-                {surface.show_grid ? 'Raster ausblenden' : 'Raster einblenden'}
+                {surface.show_grid ? 'Hide Grid' : 'Show Grid'}
               </button>
               <button
                 className="btn"
@@ -495,7 +495,7 @@ export function App() {
                   ));
                 }}
               >
-                Kalibrierung zurücksetzen
+                Reset Calibration
               </button>
             </div>
           </div>
