@@ -4,10 +4,12 @@
 PhantomCast is a Raspberry Pi 5 projection mapping system with a web-based calibration UI. It warps video content onto physical surfaces (buildings, windows, doors) using a projector connected via HDMI.
 
 ## Tech Stack
-- **Backend:** Python 3.12 + FastAPI
-- **Rendering:** GStreamer + OpenGL ES (GPU-accelerated warp)
-- **Warp Math:** OpenCV (cv2.findHomography, warpPerspective)
-- **Frontend:** React + TypeScript + Vite + Three.js
+- **Backend:** Python 3.12 + FastAPI + Uvicorn
+- **Rendering:** OpenCV (warpPerspective, bezier, mesh) + Linux framebuffer (/dev/fb0)
+- **Warp Math:** OpenCV (cv2.findHomography, warpPerspective, warpAffine)
+- **Smoothing:** SciPy (CubicSpline for motion paths)
+- **System:** psutil (health monitoring)
+- **Frontend:** React 19 + TypeScript + Vite
 - **Preview:** MJPEG stream over HTTP
 - **Config:** JSON files (surfaces.json)
 
@@ -16,10 +18,12 @@ PhantomCast is a Raspberry Pi 5 projection mapping system with a web-based calib
 phantomcast/
 ├── api/              # FastAPI backend
 │   ├── main.py
-│   └── routers/
-├── engine/           # Rendering engine (GStreamer + OpenGL)
-├── web/              # React frontend
-├── config/           # Default configs
+│   └── routers/      # surfaces, sources, playback, preview, motions, system
+├── engine/           # Rendering engine (OpenCV + framebuffer)
+│   ├── renderer.py   # Render loop, compositing, effects
+│   └── warp.py       # Surface types, homography, data models
+├── web/              # React frontend (Vite + TypeScript)
+├── config/           # Project configs (surfaces.json)
 ├── data/             # User content (videos, not in git)
 ├── PRD.md            # Product Requirements Document
 └── CLAUDE.md         # This file

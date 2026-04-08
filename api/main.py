@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 from engine.warp import ProjectConfig
 from engine.renderer import Renderer
-from .routers import surfaces, sources, playback, preview, motions
+from .routers import surfaces, sources, playback, preview, motions, system
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -67,6 +67,7 @@ app.include_router(sources.router, prefix="/api")
 app.include_router(playback.router, prefix="/api")
 app.include_router(preview.router, prefix="/api")
 app.include_router(motions.router, prefix="/api")
+app.include_router(system.router, prefix="/api")
 
 
 @app.get("/api/status")

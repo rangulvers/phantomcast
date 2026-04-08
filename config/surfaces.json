@@ -1,21 +1,79 @@
 {
   "version": 1,
   "output": {
-    "resolution": [1920, 1080],
+    "resolution": [
+      1920,
+      1080
+    ],
     "fullscreen": true
   },
   "surfaces": [
     {
-      "id": "default",
-      "name": "Hauptfläche",
+      "id": "surface_7f444f15",
+      "name": "Surface 1",
+      "surface_type": "quad",
       "enabled": true,
-      "source": "",
+      "source": "anim_particles.mp4",
       "loop": true,
       "opacity": 1.0,
-      "src_points": [[0, 0], [1920, 0], [1920, 1080], [0, 1080]],
-      "dst_points": [[0, 0], [1920, 0], [1920, 1080], [0, 1080]]
+      "show_grid": false,
+      "order": 0,
+      "pos_x": 0.0,
+      "pos_y": 0.0,
+      "scale": 1.0,
+      "rotation": 0.0,
+      "brightness": 0.0,
+      "contrast": 0.0,
+      "saturation": 0.0,
+      "blend_mode": "normal",
+      "effect": "none",
+      "effect_speed": 1.0,
+      "masks": [],
+      "bezier_handles": null,
+      "mesh_points": null,
+      "mesh_size": [
+        4,
+        4
+      ],
+      "src_points": [
+        [
+          0,
+          0
+        ],
+        [
+          1920,
+          0
+        ],
+        [
+          1920,
+          1080
+        ],
+        [
+          0,
+          1080
+        ]
+      ],
+      "dst_points": [
+        [
+          638.0,
+          661.0
+        ],
+        [
+          871.0,
+          673.0
+        ],
+        [
+          1659.0,
+          1001.0
+        ],
+        [
+          71.0,
+          1066.0
+        ]
+      ]
     }
   ],
+  "motions": [],
   "playlist": {
     "enabled": false,
     "interval_seconds": 30,

@@ -10,7 +10,6 @@ Works fully headless over SSH — the browser UI is the only control surface.
 import logging
 import mmap
 import os
-import struct
 import subprocess
 import threading
 import time
@@ -162,7 +161,7 @@ class Renderer:
         # Playback state
         self.playing = False
         self.paused = False
-        self._motion_start_time: float = 0.0
+        self._motion_start_times: dict[str, float] = {}
 
     def start(self) -> None:
         """Start the rendering loop in a background thread."""
@@ -304,22 +303,23 @@ class Renderer:
         """Main render loop — reads per-surface frames, applies warp, composites output."""
         w, h = self.config.resolution
 
-        # Black frame as default
-        black = np.zeros((h, w, 3), dtype=np.uint8)
+        # Pre-allocate output buffer (reuse every frame instead of copying)
+        output = np.zeros((h, w, 3), dtype=np.uint8)
         fps_target = 30
         frame_time = 1.0 / fps_target
 
         while self._running:
             t0 = time.monotonic()
 
-            output = black.copy()
+            output[:] = 0  # Clear in-place (faster than copy)
 
+            # Snapshot surface state and read frames under lock (minimal lock time)
+            surface_frames: list[tuple[Surface, np.ndarray | None]] = []
             with self._lock:
-                for surface in self.config.surfaces:
+                sorted_surfaces = sorted(self.config.surfaces, key=lambda s: s.order)
+                for surface in sorted_surfaces:
                     if not surface.enabled:
                         continue
-
-                    # Read this surface's video frame
                     frame = None
                     if self.playing and not self.paused and surface.id in self._caps:
                         cap = self._caps[surface.id]
@@ -330,32 +330,65 @@ class Renderer:
                                 ret, frame = cap.read()
                             if not ret:
                                 frame = None
+                    surface_frames.append((surface, frame))
 
-                        if frame is not None and (frame.shape[1] != w or frame.shape[0] != h):
-                            frame = cv2.resize(frame, (w, h))
+                # Snapshot masks and motions
+                mask_list = [(s.masks,) for s in sorted_surfaces if s.enabled and s.masks]
+                motion_list = [(m,) for m in self.config.motions if m.enabled and m.points and m.duration > 0]
 
-                    # Determine what to render for this surface
-                    if surface.show_grid:
-                        grid_frame = frame.copy() if frame is not None else np.zeros((h, w, 3), dtype=np.uint8)
-                        self._draw_grid(grid_frame, surface)
-                        warped = surface.warp_frame(grid_frame, (w, h))
-                    elif frame is not None:
-                        warped = surface.warp_frame(frame, (w, h))
-                    else:
+            # Process frames outside lock (warp, effects, compositing)
+            for surface, frame in surface_frames:
+                if frame is not None and (frame.shape[1] != w or frame.shape[0] != h):
+                    frame = cv2.resize(frame, (w, h))
+
+                if surface.show_grid:
+                    grid_frame = frame.copy() if frame is not None else np.zeros((h, w, 3), dtype=np.uint8)
+                    self._draw_grid(grid_frame, surface)
+                    warped = surface.warp_frame(grid_frame, (w, h))
+                elif frame is not None:
+                    adjusted = self._adjust_frame(frame, surface)
+                    warped = surface.warp_frame(adjusted, (w, h))
+                else:
+                    continue
+
+                if surface.effect != "none":
+                    warped = self._apply_effect(warped, surface, t0)
+
+                # Composite onto output with blend mode
+                # Use uint8 mask + cv2.copyTo (10x faster than boolean indexing)
+                vis_mask_u8 = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+                _, vis_mask_u8 = cv2.threshold(vis_mask_u8, 0, 255, cv2.THRESH_BINARY)
+
+                if surface.blend_mode == "additive":
+                    blended = cv2.add(output, warped)
+                    cv2.copyTo(blended, vis_mask_u8, output)
+                elif surface.blend_mode == "multiply":
+                    blended = cv2.multiply(output, warped, scale=1.0 / 255)
+                    cv2.copyTo(blended, vis_mask_u8, output)
+                elif surface.blend_mode == "screen":
+                    inv_out = cv2.bitwise_not(output)
+                    inv_warp = cv2.bitwise_not(warped)
+                    blended = cv2.bitwise_not(cv2.multiply(inv_out, inv_warp, scale=1.0 / 255))
+                    cv2.copyTo(blended, vis_mask_u8, output)
+                elif surface.opacity < 1.0:
+                    blended = cv2.addWeighted(output, 1.0 - surface.opacity, warped, surface.opacity, 0)
+                    cv2.copyTo(blended, vis_mask_u8, output)
+                else:
+                    cv2.copyTo(warped, vis_mask_u8, output)
+
+            # Apply exclusion masks
+            for (masks,) in mask_list:
+                for mask_def in masks:
+                    if not mask_def.get("enabled", True):
                         continue
+                    pts = mask_def.get("points", [])
+                    if len(pts) >= 3:
+                        poly = np.array(pts, dtype=np.int32)
+                        cv2.fillPoly(output, [poly], (0, 0, 0))
 
-                    # Composite onto output
-                    if surface.opacity < 1.0:
-                        output = cv2.addWeighted(output, 1.0, warped, surface.opacity, 0)
-                    else:
-                        mask = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY) > 0
-                        output[mask] = warped[mask]
-
-            # Draw motion trails on output (projector space)
-            with self._lock:
-                for motion in self.config.motions:
-                    if motion.enabled and motion.points and motion.duration > 0:
-                        self._draw_motion(output, motion, t0)
+            # Draw motion trails
+            for (motion,) in motion_list:
+                self._draw_motion(output, motion, t0)
 
             self._output_and_preview(output, w, h)
 
@@ -364,10 +397,10 @@ class Renderer:
 
     def _draw_motion(self, frame: np.ndarray, motion: Motion, now: float) -> None:
         """Draw a motion trail animation on the output frame."""
-        if not self._motion_start_time:
-            self._motion_start_time = now
+        if motion.id not in self._motion_start_times:
+            self._motion_start_times[motion.id] = now
 
-        elapsed = (now - self._motion_start_time) % motion.duration
+        elapsed = (now - self._motion_start_times[motion.id]) % motion.duration
         color = tuple(motion.color)
         trail_t = motion.trail_length
 
@@ -412,6 +445,58 @@ class Renderer:
         preview = cv2.resize(output, (preview_w, preview_h))
         with self._preview_lock:
             self._preview_frame = preview
+
+    @staticmethod
+    def _adjust_frame(frame: np.ndarray, surface: "Surface") -> np.ndarray:
+        """Apply brightness, contrast, and saturation adjustments."""
+        if surface.brightness == 0 and surface.contrast == 0 and surface.saturation == 0:
+            return frame
+
+        result = frame
+        # Brightness and contrast
+        if surface.brightness != 0 or surface.contrast != 0:
+            alpha = 1.0 + surface.contrast / 100.0  # contrast: 0.0 to 2.0
+            beta = surface.brightness * 2.55  # brightness: -255 to 255
+            result = cv2.convertScaleAbs(result, alpha=alpha, beta=beta)
+
+        # Saturation — use LUT to avoid float32 conversion
+        if surface.saturation != 0:
+            hsv = cv2.cvtColor(result, cv2.COLOR_BGR2HSV)
+            sat_scale = 1.0 + surface.saturation / 100.0
+            # Build lookup table for saturation channel (0-255 -> 0-255)
+            lut = np.clip(np.arange(256) * sat_scale, 0, 255).astype(np.uint8)
+            hsv[:, :, 1] = lut[hsv[:, :, 1]]
+            result = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+        return result
+
+    def _apply_effect(self, frame: np.ndarray, surface: "Surface", now: float) -> np.ndarray:
+        """Apply real-time effects to a warped frame."""
+        if surface.effect == "strobe":
+            # Flash on/off at effect_speed Hz
+            freq = surface.effect_speed * 5
+            if int(now * freq) % 2 == 0:
+                return np.zeros_like(frame)
+            return frame
+
+        elif surface.effect == "color_shift":
+            # Cycle through hue shift
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            shift = int((now * surface.effect_speed * 36) % 180)
+            hsv[:, :, 0] = (hsv[:, :, 0].astype(int) + shift) % 180
+            return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+        elif surface.effect == "fade_in":
+            cycle = (now * surface.effect_speed) % 5.0  # 5s cycle
+            alpha = min(1.0, cycle / 3.0)
+            return cv2.convertScaleAbs(frame, alpha=alpha, beta=0)
+
+        elif surface.effect == "fade_out":
+            cycle = (now * surface.effect_speed) % 5.0
+            alpha = max(0.0, 1.0 - cycle / 3.0)
+            return cv2.convertScaleAbs(frame, alpha=alpha, beta=0)
+
+        return frame
 
     @staticmethod
     def _draw_grid(frame: np.ndarray, surface: "Surface", cols: int = 8, rows: int = 6) -> None:

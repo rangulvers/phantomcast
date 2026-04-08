@@ -1,27 +1,97 @@
 const BASE = '/api';
 
 async function fetchJson<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, opts);
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}${path}`, opts);
+  } catch (err) {
+    console.error(`[API] Network error: ${path}`, err);
+    throw new Error(`Network error: ${path}`);
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    console.error(`[API] ${res.status} ${path}: ${body}`);
+    throw new Error(`API error ${res.status}: ${path}`);
+  }
   return res.json();
 }
 
 export interface Surface {
   id: string;
   name: string;
+  surface_type: string;
   enabled: boolean;
   source: string;
   loop: boolean;
   opacity: number;
   show_grid: boolean;
+  order: number;
+  pos_x: number;
+  pos_y: number;
+  scale: number;
+  rotation: number;
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  blend_mode: string;
+  effect: string;
+  effect_speed: number;
+  masks: MaskDef[];
+  bezier_handles: number[][] | null;
+  mesh_points: number[][][] | null;
+  mesh_size: number[];
   src_points: number[][];
   dst_points: number[][];
+}
+
+export interface MaskDef {
+  id: string;
+  name: string;
+  points: number[][];
+  enabled: boolean;
 }
 
 export interface SourceFile {
   filename: string;
   size_bytes: number;
   type: 'video' | 'image';
+  width?: number;
+  height?: number;
+  fps?: number;
+  duration?: number;
+  frames?: number;
+  codec?: string;
+}
+
+export interface SystemHealth {
+  cpu_percent: number;
+  cpu_count: number;
+  temperature: number | null;
+  ram_total_mb: number;
+  ram_used_mb: number;
+  ram_percent: number;
+  disk_total_gb: number;
+  disk_used_gb: number;
+  disk_percent: number;
+  uptime_seconds: number;
+  platform: string;
+  hostname: string;
+}
+
+export interface SystemEvent {
+  ts: string;
+  level: string;
+  source: string;
+  message: string;
+}
+
+export interface ProjectInfo {
+  filename: string;
+  surfaces: number;
+  motions: number;
+  resolution: number[];
+  size_bytes: number;
+  modified: string;
 }
 
 export interface Status {
@@ -65,6 +135,12 @@ export const api = {
       }),
     delete: (id: string) =>
       fetchJson<{ deleted: string }>(`/surfaces/${id}`, { method: 'DELETE' }),
+    reorder: (ids: string[]) =>
+      fetchJson<Surface[]>('/surfaces/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ids),
+      }),
   },
 
   sources: {
@@ -109,6 +185,17 @@ export const api = {
       }),
     delete: (id: string) =>
       fetchJson<{ deleted: string }>(`/motions/${id}`, { method: 'DELETE' }),
+  },
+
+  system: {
+    health: () => fetchJson<SystemHealth>('/system/health'),
+    events: (limit = 50) => fetchJson<SystemEvent[]>(`/system/events?limit=${limit}`),
+    projects: () => fetchJson<ProjectInfo[]>('/system/projects'),
+    saveProject: (name: string) =>
+      fetchJson<{ saved: string }>(`/system/projects/save?name=${encodeURIComponent(name)}`, { method: 'POST' }),
+    loadProject: (filename: string) =>
+      fetchJson<{ loaded: string }>(`/system/projects/load?filename=${encodeURIComponent(filename)}`, { method: 'POST' }),
+    exportConfig: () => { window.open(`${BASE}/system/export`, '_blank'); },
   },
 
   previewUrl: `${BASE}/preview.mjpeg`,
