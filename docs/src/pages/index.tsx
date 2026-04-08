@@ -1,4 +1,5 @@
 import type {ReactNode} from 'react';
+import {useEffect, useRef, useCallback} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
@@ -6,6 +7,68 @@ import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
+
+/**
+ * Cursor glow — a soft projected light that follows the mouse.
+ */
+function CursorGlow() {
+  const glowRef = useRef<HTMLDivElement>(null);
+  const pos = useRef({x: 0, y: 0});
+  const target = useRef({x: 0, y: 0});
+  const raf = useRef<number>(0);
+
+  const animate = useCallback(() => {
+    pos.current.x += (target.current.x - pos.current.x) * 0.08;
+    pos.current.y += (target.current.y - pos.current.y) * 0.08;
+    if (glowRef.current) {
+      glowRef.current.style.transform =
+        `translate(${pos.current.x - 200}px, ${pos.current.y - 200}px)`;
+    }
+    raf.current = requestAnimationFrame(animate);
+  }, []);
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      target.current = {x: e.clientX, y: e.clientY};
+    };
+    window.addEventListener('mousemove', onMove);
+    raf.current = requestAnimationFrame(animate);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      cancelAnimationFrame(raf.current);
+    };
+  }, [animate]);
+
+  return <div ref={glowRef} className={styles.cursorGlow} />;
+}
+
+/**
+ * Hook: observe elements and add `.visible` when they enter the viewport.
+ */
+function useScrollReveal() {
+  useEffect(() => {
+    const els = document.querySelectorAll('[data-reveal]');
+    if (!els.length) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const el = entry.target as HTMLElement;
+            const delay = el.dataset.revealDelay || '0';
+            el.style.transitionDelay = `${delay}ms`;
+            el.classList.add(styles.visible);
+            observer.unobserve(el);
+          }
+        });
+      },
+      {threshold: 0.15, rootMargin: '0px 0px -40px 0px'},
+    );
+
+    els.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
+}
 
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
@@ -35,7 +98,7 @@ function HomepageHeader() {
       </div>
       <div className={styles.heroScreenshot}>
         <div className="container">
-          <div className={styles.screenshotFrame}>
+          <div className={styles.screenshotFrame} data-reveal data-reveal-delay="200">
             <div className={styles.screenshotBar}>
               <span className={styles.dot} />
               <span className={styles.dot} />
@@ -98,7 +161,12 @@ function FeaturesSection() {
       <div className="container">
         <div className={styles.featuresGrid}>
           {features.map((feature, idx) => (
-            <div key={idx} className={styles.featureCard}>
+            <div
+              key={idx}
+              className={clsx(styles.featureCard, styles.reveal)}
+              data-reveal
+              data-reveal-delay={String(idx * 80)}
+            >
               <div className={styles.featureAccent} style={{background: feature.accent}} />
               <Heading as="h3" className={styles.featureTitle}>{feature.title}</Heading>
               <p className={styles.featureDescription}>{feature.description}</p>
@@ -115,7 +183,7 @@ function CapabilitiesSection() {
     <section className={styles.capabilities}>
       <div className="container">
         <div className={styles.capRow}>
-          <div className={styles.capText}>
+          <div className={clsx(styles.capText, styles.reveal)} data-reveal>
             <Heading as="h2" className={styles.capTitle}>Media Library</Heading>
             <p className={styles.capDescription}>
               Upload videos and images directly through the web interface. Assign different content
@@ -125,12 +193,12 @@ function CapabilitiesSection() {
               Learn more
             </Link>
           </div>
-          <div className={styles.capImage}>
+          <div className={clsx(styles.capImage, styles.reveal)} data-reveal data-reveal-delay="150">
             <img src="/phantomcast/img/screenshots/ui-media.png" alt="Media Library" />
           </div>
         </div>
         <div className={clsx(styles.capRow, styles.capRowReverse)}>
-          <div className={styles.capText}>
+          <div className={clsx(styles.capText, styles.reveal)} data-reveal>
             <Heading as="h2" className={styles.capTitle}>System Configuration</Heading>
             <p className={styles.capDescription}>
               Save and load project configurations. Monitor system health and performance.
@@ -140,7 +208,7 @@ function CapabilitiesSection() {
               Learn more
             </Link>
           </div>
-          <div className={styles.capImage}>
+          <div className={clsx(styles.capImage, styles.reveal)} data-reveal data-reveal-delay="150">
             <img src="/phantomcast/img/screenshots/ui-settings.png" alt="Configuration" />
           </div>
         </div>
@@ -152,8 +220,9 @@ function CapabilitiesSection() {
 function CTASection() {
   return (
     <section className={styles.cta}>
+      <div className={styles.ctaGlow} />
       <div className="container">
-        <div className={styles.ctaContent}>
+        <div className={clsx(styles.ctaContent, styles.reveal)} data-reveal>
           <Heading as="h2" className={styles.ctaTitle}>Ready to start mapping?</Heading>
           <p className={styles.ctaDescription}>
             Read the documentation to learn how to set up and use PhantomCast.
@@ -168,10 +237,13 @@ function CTASection() {
 }
 
 export default function Home(): ReactNode {
+  useScrollReveal();
+
   return (
     <Layout
       title="Projection Mapping Made Simple"
       description="PhantomCast — open-source projection mapping with a web-based calibration UI. Map video onto any surface.">
+      <CursorGlow />
       <HomepageHeader />
       <main>
         <FeaturesSection />
