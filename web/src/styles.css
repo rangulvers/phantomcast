@@ -92,6 +92,14 @@ body {
   margin-right: 28px;
   letter-spacing: -0.3px;
   user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.topnav-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 .topnav-tabs {

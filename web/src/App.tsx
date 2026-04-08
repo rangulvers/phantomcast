@@ -304,7 +304,7 @@ export function App() {
     <div className="app">
       {/* ═══ Top Navigation ═══ */}
       <nav className="topnav">
-        <span className="topnav-brand">PhantomCast</span>
+        <span className="topnav-brand"><img src="/logo.png" alt="" className="topnav-logo" />PhantomCast</span>
         <div className="topnav-tabs">
           {(['dashboard', 'workspace', 'media', 'settings'] as Page[]).map(p => (
             <button key={p} className={`topnav-tab ${page === p ? 'active' : ''}`} onClick={() => setPage(p)}>

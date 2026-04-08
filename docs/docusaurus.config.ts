@@ -53,7 +53,7 @@ const config: Config = {
       title: 'PhantomCast',
       logo: {
         alt: 'PhantomCast Logo',
-        src: 'img/logo.svg',
+        src: 'img/logo.png',
       },
       style: 'dark',
       items: [
