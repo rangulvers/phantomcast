@@ -5,84 +5,58 @@ title: Getting Started
 
 # Getting Started
 
-Get PhantomCast running in under 5 minutes.
-
-## Prerequisites
-
-- A Linux computer with HDMI output
-- Python 3.12 or newer
-- Node.js 22 or newer
-- A projector connected via HDMI
-
-## Installation
-
-Clone the repository and run the setup script:
-
-```bash
-git clone https://github.com/rangulvers/phantomcast
-cd phantomcast
-./setup.sh
-```
-
-This creates a Python virtual environment, installs all dependencies, and builds the web frontend.
-
-## Starting PhantomCast
-
-```bash
-./start.sh
-```
-
-This starts the backend server on port **8000** and the rendering engine.
+This guide walks you through your first projection mapping session with PhantomCast.
 
 ## Opening the Interface
 
-Open a browser on any device connected to the same network and go to:
+Once PhantomCast is running, open a browser on any device connected to the same network and navigate to:
 
 ```
-http://<your-computer-ip>:8000
+http://<your-server-ip>:8000
 ```
 
-You'll see the PhantomCast workspace:
+You'll see the PhantomCast workspace — the central hub for all projection mapping tasks.
 
-![PhantomCast Dashboard](/img/screenshots/ui-dashboard.png)
+![PhantomCast Workspace](/img/screenshots/ui-dashboard.png)
 
 ## Your First Projection
 
 ### 1. Upload a Video
 
-Navigate to the **Media** tab and drag a video file into the upload area, or click to browse.
+Navigate to the **Media** tab using the sidebar. Drag a video file into the upload area, or click to browse your files.
 
 ![Media Library](/img/screenshots/ui-media.png)
 
+PhantomCast supports MP4 (H.264) video and common image formats. You'll see a thumbnail and metadata for each uploaded file.
+
 ### 2. Create a Surface
 
-In the **Workspace**, click the surface type selector in the toolbar (default is "Quad") and click **+ Add Surface**. A new surface appears with four corner control points.
+Switch to the **Workspace** tab. In the toolbar above the preview, select a surface type from the dropdown — **Quad** is the default and works for most rectangular areas. Click **Add Surface** to create one.
 
-### 3. Assign a Video
+A new surface appears in the preview with four draggable control points.
 
-Select your surface in the layers panel on the right, then choose your uploaded video from the source dropdown in the inspector panel.
+### 3. Assign Your Video
 
-### 4. Calibrate
+With the surface selected, look at the **Inspector** panel on the right side. Use the source dropdown to assign your uploaded video to this surface.
 
-Drag the corner control points to match the area on your wall where you want the projection to appear. Use the calibration grid (toggle with the grid button in the toolbar) to check alignment.
+### 4. Calibrate the Projection
 
-### 5. Play
+Drag the control points in the preview to match the physical area where you want the projection to appear. For fine-tuning, use the numeric inputs in the Transform section of the inspector (position, scale, rotation).
 
-Click the **Play** button in the toolbar. Your video is now being warped onto the surface and projected via HDMI.
+Toggle the **calibration grid** using the grid button in the toolbar — this overlays a reference grid to help check alignment.
 
-## Running as a Service
+:::tip
+Calibrate in the dark with a bright test pattern for the most accurate results. Use the grid overlay to verify straight lines and corners.
+:::
 
-To start PhantomCast automatically on boot:
+### 5. Start Playback
 
-```bash
-sudo cp phantomcast.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable phantomcast
-sudo systemctl start phantomcast
-```
+Click the **Play** button in the toolbar. Your video is now being warped in real-time and output to the projector via HDMI.
 
-## Stopping PhantomCast
+## Next Steps
 
-```bash
-./stop.sh
-```
+- [Learn about surface types](/docs/guide/surfaces) — quad, triangle, bezier, and mesh warp
+- [Add effects and adjustments](/docs/guide/effects) — blend modes, brightness, contrast, strobe
+- [Draw exclusion masks](/docs/guide/masks) — black out windows and doors
+- [Record motion trails](/docs/guide/motions) — animated glowing paths across your projection
+- [Save your project](/docs/guide/projects) — preserve your calibration for next time
