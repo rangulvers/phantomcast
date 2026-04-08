@@ -1,0 +1,227 @@
+/**
+ * PhantomCast documentation theme — matches the PiMapper Pro UI design.
+ * Colors: Cyan (#00F0FF), Purple (#9D00FF), Yellow (#FED639)
+ * Fonts: Space Grotesk (headings), Inter (body), JetBrains Mono (code)
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Light mode (kept minimal — dark is primary) ── */
+:root {
+  --ifm-color-primary: #0090a8;
+  --ifm-color-primary-dark: #007d93;
+  --ifm-color-primary-darker: #00768b;
+  --ifm-color-primary-darkest: #006173;
+  --ifm-color-primary-light: #00a3bd;
+  --ifm-color-primary-lighter: #00aac5;
+  --ifm-color-primary-lightest: #00c5e3;
+  --ifm-code-font-size: 95%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 240, 255, 0.1);
+}
+
+/* ── Dark mode (primary) ── */
+[data-theme='dark'] {
+  --ifm-color-primary: #00F0FF;
+  --ifm-color-primary-dark: #00d8e6;
+  --ifm-color-primary-darker: #00ccd9;
+  --ifm-color-primary-darkest: #00a8b3;
+  --ifm-color-primary-light: #1af2ff;
+  --ifm-color-primary-lighter: #26f3ff;
+  --ifm-color-primary-lightest: #53f5ff;
+
+  --ifm-background-color: #0a0e17;
+  --ifm-background-surface-color: #111827;
+  --ifm-navbar-background-color: #0d1117;
+  --ifm-footer-background-color: #080c14;
+  --ifm-card-background-color: #111827;
+  --ifm-toc-border-color: #1e293b;
+  --ifm-color-emphasis-300: #334155;
+  --ifm-hr-border-color: #1e293b;
+
+  --docusaurus-highlighted-code-line-bg: rgba(0, 240, 255, 0.1);
+}
+
+/* ── Typography ── */
+:root {
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-heading-font-family: 'Space Grotesk', system-ui, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono', 'Fira Code', monospace;
+  --ifm-font-size-base: 16px;
+  --ifm-heading-font-weight: 600;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--ifm-heading-font-family);
+}
+
+/* ── Navbar ── */
+.navbar {
+  border-bottom: 1px solid #1e293b;
+  backdrop-filter: blur(12px);
+}
+
+[data-theme='dark'] .navbar {
+  background: rgba(13, 17, 23, 0.85);
+}
+
+.navbar__title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+[data-theme='dark'] .navbar__link:hover,
+[data-theme='dark'] .navbar__link--active {
+  color: #00F0FF;
+}
+
+/* ── Sidebar ── */
+[data-theme='dark'] .menu__link:hover,
+[data-theme='dark'] .menu__link--active {
+  color: #00F0FF;
+}
+
+[data-theme='dark'] .menu__link--sublist-caret::after {
+  filter: brightness(2);
+}
+
+[data-theme='dark'] .menu__list-item-collapsible:hover {
+  background: rgba(0, 240, 255, 0.05);
+}
+
+/* ── Accent gradient for links and headings ── */
+[data-theme='dark'] .markdown h1 {
+  background: linear-gradient(135deg, #00F0FF, #9D00FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Code blocks ── */
+[data-theme='dark'] .prism-code {
+  background: #0d1117 !important;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+}
+
+[data-theme='dark'] code {
+  background: rgba(0, 240, 255, 0.08);
+  border: 1px solid rgba(0, 240, 255, 0.15);
+  border-radius: 4px;
+  color: #00F0FF;
+  padding: 2px 6px;
+}
+
+/* Don't double-style code in code blocks */
+[data-theme='dark'] .prism-code code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+/* ── Cards / admonitions ── */
+[data-theme='dark'] .alert {
+  border-radius: 8px;
+  border-left-width: 4px;
+}
+
+[data-theme='dark'] .alert--info {
+  --ifm-alert-background-color: rgba(0, 240, 255, 0.06);
+  --ifm-alert-border-color: #00F0FF;
+}
+
+[data-theme='dark'] .alert--warning {
+  --ifm-alert-background-color: rgba(254, 214, 57, 0.06);
+  --ifm-alert-border-color: #FED639;
+}
+
+[data-theme='dark'] .alert--danger {
+  --ifm-alert-background-color: rgba(255, 75, 75, 0.06);
+  --ifm-alert-border-color: #FF4B4B;
+}
+
+[data-theme='dark'] .alert--success {
+  --ifm-alert-background-color: rgba(0, 255, 136, 0.06);
+  --ifm-alert-border-color: #00FF88;
+}
+
+/* ── Table of contents ── */
+[data-theme='dark'] .table-of-contents__link:hover,
+[data-theme='dark'] .table-of-contents__link--active {
+  color: #00F0FF;
+}
+
+/* ── Footer ── */
+[data-theme='dark'] .footer {
+  border-top: 1px solid #1e293b;
+}
+
+[data-theme='dark'] .footer__link-item:hover {
+  color: #00F0FF;
+}
+
+/* ── Pagination ── */
+[data-theme='dark'] .pagination-nav__link:hover {
+  border-color: #00F0FF;
+}
+
+[data-theme='dark'] .pagination-nav__sublabel {
+  color: #64748b;
+}
+
+/* ── Scrollbar ── */
+[data-theme='dark'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-track {
+  background: #0a0e17;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 4px;
+}
+
+[data-theme='dark'] ::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* ── Buttons ── */
+[data-theme='dark'] .button--primary {
+  background: linear-gradient(135deg, #00F0FF, #9D00FF);
+  border: none;
+  color: #000;
+  font-weight: 600;
+}
+
+[data-theme='dark'] .button--primary:hover {
+  background: linear-gradient(135deg, #33f3ff, #b133ff);
+  color: #000;
+}
+
+[data-theme='dark'] .button--secondary {
+  border-color: #00F0FF;
+  color: #00F0FF;
+}
+
+[data-theme='dark'] .button--secondary:hover {
+  background: rgba(0, 240, 255, 0.1);
+  border-color: #00F0FF;
+  color: #00F0FF;
+}
+
+/* ── Search highlight ── */
+[data-theme='dark'] mark,
+[data-theme='dark'] .search-result-match {
+  background: rgba(0, 240, 255, 0.2);
+  color: #00F0FF;
+}
+
+/* ── Selection ── */
+[data-theme='dark'] ::selection {
+  background: rgba(0, 240, 255, 0.25);
+  color: #fff;
+}
